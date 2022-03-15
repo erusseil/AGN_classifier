@@ -30,5 +30,5 @@ def agn_classifier(data):
     features = fe.parametrise(clean, k.BAND, k.bump, k.guess_bump, k.MINIMUM_POINT, k.original_shift_bump)
 
     clf = rfc.load_classifier()
-    agn_or_not = clf.predict_proba(features)
+    agn_or_not = clf.predict_proba(features.iloc[:, 1:])
     return agn_or_not[:, 1]
