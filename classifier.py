@@ -9,7 +9,7 @@ def load_classifier():
     """
     load the random forest classifier trained to recognize the AGN.
     """
-    with open("AGN_RF_classifier", 'rb') as f:
+    with open("AGN_classifier/AGN_RF_classifier", 'rb') as f:
         clf = pickle.load(f)
 
     return clf
