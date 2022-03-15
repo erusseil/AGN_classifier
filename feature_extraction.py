@@ -5,8 +5,6 @@ from iminuit import Minuit
 from iminuit.cost import LeastSquares
 from sklearn.metrics import mean_squared_error
 
-import kernel as k
-
 # Dictionnary to convert filters to PLAsTiCC format
 filter_dict = {'u':0, 'g':1, 'r':2, 'i':3, 'z':4, 'Y':5}
 
@@ -376,21 +374,3 @@ def parametrise(clean, band_used, func, guess, minimum_points, original_shift = 
     print('Total time of the parametrisation %.1f sec'%(stop - start)) 
 
     return table
-
-
-
-def agn_classifier(data):
-    """
-    call the agn_classifier
-
-    Parameters
-    ----------
-    data : DataFrame
-        alerts from fink with aggregated lightcurves
-    """
-
-    data_plasticc = plastic_format(data, k.BAND)
-    clean = clean_data(data_plasticc, k.BAND)
-    features = parametrise(clean, k.BAND, k.bump, k.guess_bump, k.original_shift_bump, k.MINIMUM_POINT)
-
-    
