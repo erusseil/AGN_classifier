@@ -65,17 +65,11 @@ def convert_full_dataset(pdf: pd.DataFrame, passbands, obj_id_header='objectId')
 
         for f in range(1,3):
             
-            if isinstance(pdf.iloc[index]['cfid'], str):
-                ffs = np.array([int(item) for item in pdf.iloc[index]['cfid'][1:-1].split()])
-                filter_flag = ffs == f
-                mjd = np.array([float(item) for item in pdf.iloc[index]['cjd'][1:-1].split()])[filter_flag]
-                mag = np.array([float(item) for item in pdf.iloc[index]['cmagpsf'][1:-1].split()])[filter_flag]
-                magerr = np.array([float(item) for item in pdf.iloc[index]['csigmapsf'][1:-1].split()])[filter_flag]
-            else:
-                filter_flag = pdf['cfid'].values[index] == f
-                mjd = pdf['cjd'].values[index][filter_flag]
-                mag = pdf['cmagpsf'].values[index][filter_flag]
-                magerr = pdf['csigmapsf'].values[index][filter_flag] 
+            
+            filter_flag = np.array(pdf['cfid'].values[index]) == f
+            mjd = np.array(pdf['cjd'].values[index])[filter_flag]
+            mag = np.array(pdf['cmagpsf'].values[index])[filter_flag]
+            magerr = np.array(pdf['csigmapsf'].values[index])[filter_flag] 
 
             fluxcal = []
             fluxcal_err = []
