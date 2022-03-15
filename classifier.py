@@ -27,7 +27,7 @@ def agn_classifier(data):
 
     data_plasticc = fe.plastic_format(data, k.BAND)
     clean = fe.clean_data(data_plasticc, k.BAND)
-    features = fe.parametrise(clean, k.BAND, k.bump, k.guess_bump, k.original_shift_bump, k.MINIMUM_POINT)
+    features = fe.parametrise(clean, k.BAND, k.bump, k.guess_bump, k.MINIMUM_POINT, k.original_shift_bump)
 
     clf = rfc.load_classifier()
     agn_or_not = clf.predict_proba(features)
