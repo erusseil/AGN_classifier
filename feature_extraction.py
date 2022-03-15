@@ -1,13 +1,11 @@
 import numpy as np
 import pandas as pd
-import matplotlib
-import matplotlib.pyplot as plt
 import timeit
-import os
-import glob
 from iminuit import Minuit
 from iminuit.cost import LeastSquares
 from sklearn.metrics import mean_squared_error
+
+import kernel as k
 
 # Dictionnary to convert filters to PLAsTiCC format
 filter_dict = {'u':0, 'g':1, 'r':2, 'i':3, 'z':4, 'Y':5}
@@ -204,37 +202,12 @@ def clean_data(data, band_used):
         
     return clean
 
-#---------------------------------------------------------FITTING FUNCTIONS---------------------------------------------------------------------  
 
-#----------------------------------------------------------------------------
-## BASIC FUNCTIONS 
-#------------------------------------------------------------------------------
-
-
-def protected_exponent(x1):
-    with np.errstate(over='ignore'):
-        return np.where(np.abs(x1) < 10, np.exp(x1), np.exp(10))
-
-
-def sig(x):
-    return 1/(1+protected_exponent(-x))
-
-
-#------------------------------------------------------------------------------
-## BUMP
-#------------------------------------------------------------------------------
-
-
-def bump(x, p1, p2, p3):
-    return sig(p1*x + p2 - protected_exponent(p3*x))
-
-guess_bump = [0.225, -2.5, 0.038]
-original_shift_bump = 40
 
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
 
-def parametrise(clean, band_used, save, func, guess, minimum_points, original_shift = 0, checkpoint='', begin=0):
+def parametrise(clean, band_used, func, guess, minimum_points, original_shift = 0, checkpoint='', begin=0):
      
     """Find best fit parameters for the polynomial model.
     
@@ -263,8 +236,6 @@ def parametrise(clean, band_used, save, func, guess, minimum_points, original_sh
         avoids recalculating from start.
     begin : int
         Start table construction at this line 
-    save: str
-        location and name of the save
     """
     
     band_used = pd.Series(band_used).map(filter_dict)
@@ -398,38 +369,28 @@ def parametrise(clean, band_used, save, func, guess, minimum_points, original_sh
                 
         # Once all passband has been computed for one object, ligne is full, we add it to the final df
         table.iloc[j,1:] = np.array(ligne).flatten()
-        table.to_csv(f'{save}.csv',index=False) 
+        # table.to_csv(f'{save}.csv',index=False) 
 
     stop = timeit.default_timer()
 
     print('Total time of the parametrisation %.1f sec'%(stop - start)) 
 
+    return table
 
-def main():
-    
-    ########## USER CHOICE ##############
-    data = pd.read_parquet('data_test.parquet')
-    save_path = 'features'
-    
 
-    minimum_points = 4
-    band = ['g','r']
 
-    #####################################
+def agn_classifier(data):
+    """
+    call the agn_classifier
+
+    Parameters
+    ----------
+    data : DataFrame
+        alerts from fink with aggregated lightcurves
+    """
+
+    data_plasticc = plastic_format(data, k.BAND)
+    clean = clean_data(data_plasticc, k.BAND)
+    features = parametrise(clean, k.BAND, k.bump, k.guess_bump, k.original_shift_bump, k.MINIMUM_POINT)
+
     
-    func = bump
-    guess = guess_bump
-    original_shift = original_shift_bump
-    
-    data_plasticc = plastic_format(data, band)
-    print('Converted to plasticc format\n')
-        
-    clean = clean_data(data_plasticc,band)
-    print('Data base cleaned\n')
-    
-    parametrise(clean, band, save_path, func, guess, original_shift, minimum_points)
-    print('\nFeature extraction completed')
-    
-    
-if __name__ == '__main__':
-    main()
