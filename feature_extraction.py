@@ -89,7 +89,7 @@ def convert_full_dataset(pdf: pd.DataFrame, passbands, obj_id_header='objectId')
     return lc_flux_sig
 
 
-def plastic_format(data, passbands):
+def plastic_format(data, passbands, obj_id_header='objectId'):
     
     """Transform a data set from fink format to PLAsTiCC format .
     
@@ -108,7 +108,7 @@ def plastic_format(data, passbands):
     """
     
     # Convert magnitude to flux
-    converted = convert_full_dataset(data, passbands)
+    converted = convert_full_dataset(data, passbands, obj_id_header=obj_id_header)
 
     # Rename columns 
     transformed = converted.rename(columns={"id": "object_id",
