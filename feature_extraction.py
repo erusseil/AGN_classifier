@@ -199,7 +199,7 @@ def clean_data(data, band_used):
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
 
-def parametrise(clean, band_used, func, guess, minimum_points, original_shift = 0, checkpoint='', begin=0):
+def parametrise(clean, band_used, func, guess, minimum_points, original_shift = 0):
      
     """Find best fit parameters for the polynomial model.
     
@@ -221,13 +221,6 @@ def parametrise(clean, band_used, func, guess, minimum_points, original_shift = 
         Shift the mjd to this amount. Can be used if the function
         is able to fit under specific max-flux mjd value.
         Default is 0
-    checkpoint : str 
-        The table is saved each time a line is calculated, 
-        if a problem occured you can put the partially filled 
-        table as a check point. With the right 'begin' it 
-        avoids recalculating from start.
-    begin : int
-        Start table construction at this line 
     """
     
     band_used = pd.Series(band_used).map(filter_dict)
@@ -254,18 +247,12 @@ def parametrise(clean, band_used, func, guess, minimum_points, original_shift = 
     #####################################################################################
     
     
-    # We initialise a table of correct size but filled with 0    
-    if checkpoint == '' :               
 
-        df = {'object_id': objects}
-        
-        table = pd.DataFrame(data=df)    
-        for i in range(total_parameters):
-            table[i]=0
-            
-    # Or we start from checkpoint if provided
-    else:
-        table = checkpoint
+    df = {'object_id': objects}
+    
+    table = pd.DataFrame(data=df)    
+    for i in range(total_parameters):
+        table[i]=0
         
     # Rename the table 
     for idx1,i in enumerate(band_used):
@@ -295,10 +282,10 @@ def parametrise(clean, band_used, func, guess, minimum_points, original_shift = 
     
     start = timeit.default_timer()
         
-    print("Number of objects to parametrize : ",len(objects)-begin,"\n")
+    print("Number of objects to parametrize : ",len(objects)-0,"\n")
     
     # i and j loop over all light curves for all objects
-    for j in range(begin,len(objects)):
+    for j in range(0,len(objects)):
 
         print(j, end="\r")
         
@@ -321,7 +308,6 @@ def parametrise(clean, band_used, func, guess, minimum_points, original_shift = 
 
 
                 # Create a dictionnary of form {parameter_name : initial_guess}
-                # In the case of 'shift', the initial guess is the mjd of the max flux
 
                 parameters_dict = {}
                 for idx,i in enumerate(param_names[:len(guess)]):
@@ -361,7 +347,6 @@ def parametrise(clean, band_used, func, guess, minimum_points, original_shift = 
                 
         # Once all passband has been computed for one object, ligne is full, we add it to the final df
         table.iloc[j,1:] = np.array(ligne).flatten()
-        # table.to_csv(f'{save}.csv',index=False) 
 
     stop = timeit.default_timer()
 

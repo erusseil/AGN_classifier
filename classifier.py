@@ -31,4 +31,8 @@ def agn_classifier(data):
 
     clf = rfc.load_classifier()
     agn_or_not = clf.predict_proba(features.iloc[:, 1:])
-    return agn_or_not[:, 1]
+
+    features["proba"] = agn_or_not[:, 1]
+    sample_with_proba = data.merge(features, left_on="candid", right_on="object_id")
+
+    return sample_with_proba
