@@ -199,8 +199,8 @@ def clean_data(data, band_used):
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
 
-def parametrise(clean, band_used, func, guess, minimum_points, original_shift = 0):
-     
+def parametrise(clean, band_used, func, guess, minimum_points, original_shift):
+    
     """Find best fit parameters for the polynomial model.
     
     Parameters
