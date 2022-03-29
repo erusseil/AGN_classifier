@@ -24,8 +24,8 @@ def sig(x):
 #------------------------------------------------------------------------------
 
 
-def bump(x, p1, p2, p3):
-    return sig(p1*x + p2 - protected_exponent(p3*x))
+def bump(x, p1, p2, p3, p4):
+    return sig(p1*x + p2 - protected_exponent(p3*x)) + p4
 
-guess_bump = [0.225, -2.5, 0.038]
+guess_bump = [0.225, -2.5, 0.038, 0]
 original_shift_bump = 40
