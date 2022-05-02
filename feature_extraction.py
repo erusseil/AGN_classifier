@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import timeit
 from iminuit import Minuit
 from iminuit.cost import LeastSquares
 from sklearn.metrics import mean_squared_error
@@ -226,53 +225,23 @@ def parametrise(clean, band_used, func, guess, minimum_points, original_shift):
     band_used = pd.Series(band_used).map(filter_dict)
     
     np.seterr(all='ignore')
-
+        
     # Get ids of the objects
     objects = np.unique(clean['object_id'])
- 
-    # list of parameter names
-    param_names = func.__code__.co_varnames[1:len(guess)+1] 
-
-    # Add the 3 extra parameters in the list of parameters name
-    param_names = np.append(param_names,'cost')
-    param_names = np.append(param_names,'nb_points') 
-    param_names = np.append(param_names,'peak')
     
-    total_parameters = len(band_used)*(len(param_names))
+    #Get the number of passband used
+    nb_passband = len(band_used)
+    
+    # Get targets of the object
+    target_list = np.array(clean.pivot_table(columns="object_id", values="target"))[0]
+    
+    clean = pd.merge(peaktable, clean, on=["object_id","passband"])
+    clean = clean.rename(columns={0: "peak"})
+
+                    
+    # We initialise a table
+    table = pd.DataFrame(data={'object_id': objects, 'target': target_list})      
         
-    #####################################################################################
-    
-    # INITIALISE PARAMETER TABLE    
-    
-    #####################################################################################
-    
-    
-
-    df = {'object_id': objects}
-    
-    table = pd.DataFrame(data=df)    
-    for i in range(total_parameters):
-        table[i]=0
-        
-    # Rename the table 
-    for idx1,i in enumerate(band_used):
-        for idx2,j in enumerate(param_names):
-            table = table.rename(columns={idx2+idx1*len(param_names):(j+'_'+str(i))})     
-          
-    #####################################################################################
-    
-    # COMPUTE NUMBER OF POINTS PER OBJECTS PER PASSBAND
-    
-    #####################################################################################          
-        
-     # Create a table describing how many points exist for each bands and each object   
-    counttable = clean.pivot_table(index="passband", columns="object_id", values="mjd",aggfunc=lambda x: len(x))
-    
-    # Create a table describing how many bands are complete for each object
-    df_validband = pd.DataFrame(data={'nb_valid' : (counttable>=minimum_points).sum()})
-
-    clean = pd.merge(df_validband,clean, on=["object_id"])
-
         
     #####################################################################################
     
@@ -280,76 +249,33 @@ def parametrise(clean, band_used, func, guess, minimum_points, original_shift):
     
     #####################################################################################  
     
-    start = timeit.default_timer()
-        
-    print("Number of objects to parametrize : ",len(objects)-0,"\n")
     
-    # i and j loop over all light curves for all objects
-    for j in range(0,len(objects)):
+    stdtable = clean.pivot_table(index="passband", columns="object_id", values="flux",aggfunc=lambda x : np.std(x))
+    stddf = pd.DataFrame(data=stdtable.unstack())
+    stddf.reset_index(inplace=True)
 
-        print(j, end="\r")
+    counttable = clean.pivot_table(index="passband", columns="object_id", values="flux",aggfunc=lambda x : len(x))
+    countdf = pd.DataFrame(data=counttable.unstack())
+    countdf.reset_index(inplace=True)
+    
+    maxtable = clean.pivot_table(index="passband", columns="object_id", values="peak",aggfunc=lambda x : x.iloc[0])
+    maxdf = pd.DataFrame(data=maxtable.unstack())
+    maxdf.reset_index(inplace=True)
         
-        ligne=[]
-        ide=objects[j]
+    for i in band_used:
         
-        # Only performes the fit if the number of points is respected
-        if clean.loc[clean['object_id'] == ide,'nb_valid'].iloc[0] == len(band_used):
-            
-            for i in band_used:
-
-                # Store point's information of the objects
-                obj = clean.loc[(clean['object_id'] == ide) & (clean['passband'] == i)]
-                flux = np.array(obj['flux'])
-                time = np.array(obj['mjd'])
-                fluxerr = np.array(obj['flux_err'])            
-                shift = time[np.argmax(flux)]
-            
-                time = time-shift+original_shift
-
-
-                # Create a dictionnary of form {parameter_name : initial_guess}
-
-                parameters_dict = {}
-                for idx,i in enumerate(param_names[:len(guess)]):
-                    parameters_dict[i]=guess[idx]
-
-                # Performs least square regression using iminuit
-                least_squares = LeastSquares(time,flux,fluxerr,func)
-                fit = Minuit(least_squares, **parameters_dict)
-                fit.migrad()
-
-                # Collect all the fit values and store it inside ligne
-                parameters = []
-                for i in range(len(fit.values)):
-                    parameters.append(fit.values[i])
-
-                ligne = np.append(ligne,parameters)
-
-
-                # Add extra parameters inside ligne
-
-                # Mean square error of the fit
-                mse = mean_squared_error(flux, func(time, *parameters))
-                ligne = np.append(ligne,mse)
-
-                # Number of points 
-                ligne = np.append(ligne,len(time))
-
-                # Maximum flux
-                band_max = obj.loc[:,'peak'].iloc[0]
-                ligne = np.append(ligne,band_max)
+        # Add extra parameters 
                 
-        # Else add a line of zero         
-        else:
-            ligne = [0]*total_parameters
-            
+        table = pd.merge(maxdf.loc[maxdf['passband']==i, ['object_id', 0]], table, on=["object_id"])
+        table = table.rename(columns={0: f"peak_{i}"})
         
-                
-        # Once all passband has been computed for one object, ligne is full, we add it to the final df
-        table.iloc[j,1:] = np.array(ligne).flatten()
-
-    stop = timeit.default_timer()
-
-    print('Total time of the parametrisation %.1f sec'%(stop - start)) 
+        table = pd.merge(meandf.loc[meandf['passband']==i, ['object_id', 0]], table, on=["object_id"])
+        table = table.rename(columns={0: f"mean_{i}"})
+        
+        table = pd.merge(countdf.loc[countdf['passband']==i, ['object_id', 0]], table, on=["object_id"])
+        table = table.rename(columns={0: f"nb_points_{i}"})
+        
+        table = pd.merge(stddf.loc[stddf['passband']==i, ['object_id', 0]], table, on=["object_id"])
+        table = table.rename(columns={0: f"std_{i}"})
 
     return table
