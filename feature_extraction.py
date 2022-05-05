@@ -1,8 +1,5 @@
 import numpy as np
 import pandas as pd
-from iminuit import Minuit
-from iminuit.cost import LeastSquares
-from sklearn.metrics import mean_squared_error
 
 # Dictionnary to convert filters to PLAsTiCC format
 filter_dict = {'u':0, 'g':1, 'r':2, 'i':3, 'z':4, 'Y':5}
@@ -24,8 +21,10 @@ def mag2fluxcal_snana(magpsf: float, sigmapsf: float):
     fluxcal_err: float
         Absolute error on fluxcal (the derivative has a minus sign)
     """
+
     if magpsf is None:
         return None, None
+
     fluxcal = 10 ** (-0.4 * magpsf) * 10 ** (11)
     fluxcal_err = 9.21034 * 10 ** 10 * np.exp(-0.921034 * magpsf) * sigmapsf
 
@@ -55,20 +54,19 @@ def convert_full_dataset(pdf: pd.DataFrame, passbands, obj_id_header='objectId')
 
     # hard code ZTF filters
     filters = passbands
-    
+
     lc_flux_sig = []
 
     for index in range(pdf.shape[0]):
 
         name = pdf[obj_id_header].values[index]
+        for f in range(1, 3):
 
-        for f in range(1,3):
-            
-            
             filter_flag = np.array(pdf['cfid'].values[index]) == f
             mjd = np.array(pdf['cjd'].values[index])[filter_flag]
             mag = np.array(pdf['cmagpsf'].values[index])[filter_flag]
-            magerr = np.array(pdf['csigmapsf'].values[index])[filter_flag] 
+            magerr = np.array(pdf['csigmapsf'].values[index])[filter_flag]
+
 
             fluxcal = []
             fluxcal_err = []
@@ -115,9 +113,6 @@ def plastic_format(data, passbands, obj_id_header='objectId'):
                               "MJD": "mjd",
                               "FLUXCAL":"flux",
                               "FLUXCALERR":"flux_err"})
-    
-    # Add a fictiv detected_bool column to match PLAsTiCC format
-    transformed['detected_bool'] = 1 
 
     # Rename bands to numbers
     transformed['passband'] = transformed['passband'].map(filter_dict)
@@ -168,11 +163,12 @@ def clean_data(data, band_used):
 
     #---------------------------------------------------------------------------------
 
-    mintable = clean.pivot_table(index="passband", columns="object_id", values="mjd",aggfunc='min')
+
+    mintable = clean.pivot_table(index="passband", columns="object_id", values="mjd", aggfunc='min')
     mindf = pd.DataFrame(data=mintable.unstack())
-    clean = pd.merge(mindf, clean, on=["object_id","passband"])
+    clean = pd.merge(mindf, clean, on=["object_id", "passband"])
     clean['mjd'] = clean['mjd']-clean[0]
-    clean = clean.drop([0],axis=1)
+    clean = clean.drop([0], axis=1)
 
     #---------------------------------------------------------------------------------
 
@@ -180,25 +176,23 @@ def clean_data(data, band_used):
 
     #---------------------------------------------------------------------------------
     
-    maxtable = clean.pivot_table(index="passband", columns="object_id", values="flux",aggfunc='max')
+    maxtable = clean.pivot_table(index="passband", columns="object_id", values="flux", aggfunc='max')
     maxdf = pd.DataFrame(data=maxtable.unstack())
-    clean = pd.merge(maxdf, clean, on=["object_id","passband"])
+    clean = pd.merge(maxdf, clean, on=["object_id", "passband"])
     clean['flux'] = clean['flux']/clean[0]
     clean['flux_err'] = clean['flux_err'] / clean[0]
-    clean = clean.drop([0],axis=1)
+    clean = clean.drop([0], axis=1)
     
     # Merge peaktable with data
-    clean = pd.merge(maxdf, clean, on=["object_id","passband"])
+    clean = pd.merge(maxdf, clean, on=["object_id", "passband"])
     clean = clean.rename(columns={0: "peak"})
         
     return clean
 
-
-
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
 
-def parametrise(clean, band_used, func, guess, minimum_points, original_shift):
+def parametrise(clean, band_used, minimum_points, columns):
     
     """Find best fit parameters for the polynomial model.
     
@@ -209,17 +203,6 @@ def parametrise(clean, band_used, func, guess, minimum_points, original_shift):
     band_used: list
        List of all the passband you want to keep 
        (all possible bands : ['u','g','r','i','z','Y'].
-    func: python function
-        Function used for the minimization
-    guess: list
-        Initial parameters used for the minimization
-    minimum_points: int
-        Minimum number of points requiered per passband.
-        Else features extraction will output only 0 values.     
-    original_shift: float
-        Shift the mjd to this amount. Can be used if the function
-        is able to fit under specific max-flux mjd value.
-        Default is 0
     """
     
     band_used = pd.Series(band_used).map(filter_dict)
@@ -228,54 +211,55 @@ def parametrise(clean, band_used, func, guess, minimum_points, original_shift):
         
     # Get ids of the objects
     objects = np.unique(clean['object_id'])
-    
-    #Get the number of passband used
-    nb_passband = len(band_used)
-    
-    # Get targets of the object
-    target_list = np.array(clean.pivot_table(columns="object_id", values="target"))[0]
-    
-    clean = pd.merge(peaktable, clean, on=["object_id","passband"])
-    clean = clean.rename(columns={0: "peak"})
 
-                    
     # We initialise a table
-    table = pd.DataFrame(data={'object_id': objects, 'target': target_list})      
-        
-        
+    table = pd.DataFrame(data={'object_id': objects})
+
+    ##### FILTER OBJECTS WITH LESS THAN THE MINIMUM NUMBER OF POINTS PER PASSBAND
+
+    # Create a table describing how many points exist for each bands and each object
+    counttable = clean.pivot_table(index="passband", columns="object_id", values="mjd", aggfunc=lambda x: len(x))
+
+    # Create a table describing how many bands are complete for each object
+    df_validband = pd.DataFrame(data={'nb_valid': (counttable >= minimum_points).sum()})
+
+    clean = pd.merge(df_validband, clean, on=["object_id"])
+    clean = clean[clean['nb_valid'] == len(band_used)]
+    clean = clean.drop(['nb_valid'], axis=1)
+
     #####################################################################################
-    
+
     # CONSTRUCT TABLE
-    
-    #####################################################################################  
-    
-    
-    stdtable = clean.pivot_table(index="passband", columns="object_id", values="flux",aggfunc=lambda x : np.std(x))
+
+    #####################################################################################
+
+    stdtable = clean.pivot_table(index="passband", columns="object_id", values="flux", aggfunc=lambda x: np.std(x))
     stddf = pd.DataFrame(data=stdtable.unstack())
     stddf.reset_index(inplace=True)
 
-    counttable = clean.pivot_table(index="passband", columns="object_id", values="flux",aggfunc=lambda x : len(x))
+    counttable = clean.pivot_table(index="passband", columns="object_id", values="flux", aggfunc=lambda x: len(x))
     countdf = pd.DataFrame(data=counttable.unstack())
     countdf.reset_index(inplace=True)
-    
-    maxtable = clean.pivot_table(index="passband", columns="object_id", values="peak",aggfunc=lambda x : x.iloc[0])
+
+
+    maxtable = clean.pivot_table(index="passband", columns="object_id", values="peak", aggfunc=lambda x: x.iloc[0])
     maxdf = pd.DataFrame(data=maxtable.unstack())
     maxdf.reset_index(inplace=True)
-        
+
     for i in band_used:
-        
-        # Add extra parameters 
-                
-        table = pd.merge(maxdf.loc[maxdf['passband']==i, ['object_id', 0]], table, on=["object_id"])
+        # Add extra parameters
+
+        table = pd.merge(maxdf.loc[maxdf['passband'] == i, ['object_id', 0]], table, on=["object_id"])
         table = table.rename(columns={0: f"peak_{i}"})
-        
-        table = pd.merge(meandf.loc[meandf['passband']==i, ['object_id', 0]], table, on=["object_id"])
-        table = table.rename(columns={0: f"mean_{i}"})
-        
-        table = pd.merge(countdf.loc[countdf['passband']==i, ['object_id', 0]], table, on=["object_id"])
+
+        table = pd.merge(countdf.loc[countdf['passband'] == i, ['object_id', 0]], table, on=["object_id"])
         table = table.rename(columns={0: f"nb_points_{i}"})
-        
-        table = pd.merge(stddf.loc[stddf['passband']==i, ['object_id', 0]], table, on=["object_id"])
+
+        table = pd.merge(stddf.loc[stddf['passband'] == i, ['object_id', 0]], table, on=["object_id"])
         table = table.rename(columns={0: f"std_{i}"})
+
+
+    table = table[columns]
+
 
     return table
