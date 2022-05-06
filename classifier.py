@@ -35,10 +35,25 @@ def agn_classifier(data):
     features = fe.parametrise(clean, k.BAND, k.MINIMUM_POINTS, k.COLUMNS)
 
     clf = rfc.load_classifier()
-    agn_or_not = clf.predict_proba(features.iloc[:, 1:])
 
-    return agn_or_not[:, 0]
+    invalid_flag = []
+    for i in features['object_id']:
+        invalid_flag.append('INVALID' in i)
 
+    final_proba = np.array([-1]*len(features['object_id'])).astype(np.float64)
 
+    agn_or_not = clf.predict_proba(features.loc[~np.array(invalid_flag)].iloc[:, 1:])
 
+    index_to_replace = features.loc[~np.array(invalid_flag)].iloc[:, 1:].index
+    final_proba[index_to_replace.values] = agn_or_not[:, 0]
 
+    return final_proba
+
+"""
+if __name__ == '__main__':
+
+    data = pd.read_parquet('alerts_samples.parquet')
+    data = data.iloc[:1000]
+    agn_classifier(data)
+
+"""

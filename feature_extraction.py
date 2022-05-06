@@ -204,16 +204,10 @@ def parametrise(clean, band_used, minimum_points, columns):
        List of all the passband you want to keep 
        (all possible bands : ['u','g','r','i','z','Y'].
     """
-    
+
     band_used = pd.Series(band_used).map(filter_dict)
     
     np.seterr(all='ignore')
-        
-    # Get ids of the objects
-    objects = np.unique(clean['object_id'])
-
-    # We initialise a table
-    table = pd.DataFrame(data={'object_id': objects})
 
     ##### FILTER OBJECTS WITH LESS THAN THE MINIMUM NUMBER OF POINTS PER PASSBAND
 
@@ -224,8 +218,16 @@ def parametrise(clean, band_used, minimum_points, columns):
     df_validband = pd.DataFrame(data={'nb_valid': (counttable >= minimum_points).sum()})
 
     clean = pd.merge(df_validband, clean, on=["object_id"])
-    clean = clean[clean['nb_valid'] == len(band_used)]
+    clean.loc[clean['nb_valid'] != len(band_used), 'object_id'] += '_INVALID'
+    #clean = clean[clean['nb_valid'] == len(band_used)]
     clean = clean.drop(['nb_valid'], axis=1)
+
+
+    # Get ids of the objects
+    objects = np.unique(clean['object_id'])
+
+    # We initialise a table
+    table = pd.DataFrame(data={'object_id': objects})
 
     #####################################################################################
 
@@ -240,7 +242,6 @@ def parametrise(clean, band_used, minimum_points, columns):
     counttable = clean.pivot_table(index="passband", columns="object_id", values="flux", aggfunc=lambda x: len(x))
     countdf = pd.DataFrame(data=counttable.unstack())
     countdf.reset_index(inplace=True)
-
 
     maxtable = clean.pivot_table(index="passband", columns="object_id", values="peak", aggfunc=lambda x: x.iloc[0])
     maxdf = pd.DataFrame(data=maxtable.unstack())
@@ -260,6 +261,5 @@ def parametrise(clean, band_used, minimum_points, columns):
 
 
     table = table[columns]
-
 
     return table
