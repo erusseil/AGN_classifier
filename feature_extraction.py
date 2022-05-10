@@ -104,6 +104,7 @@ def plastic_format(data, passbands, obj_id_header='objectId'):
         "flux", "flux_err"]
     """
     
+    
     # Convert magnitude to flux
     converted = convert_full_dataset(data, passbands, obj_id_header=obj_id_header)
 
@@ -119,8 +120,10 @@ def plastic_format(data, passbands, obj_id_header='objectId'):
     
     # Finally we remove lines containing NaN values
     remove_mask = ~transformed['flux'].isnull()
+    transformed.to_csv('before.csv')
     dataset = transformed[remove_mask]
-
+    dataset.to_csv('after.csv')
+    
     return dataset
 
 
@@ -192,7 +195,7 @@ def clean_data(data, band_used):
 #--------------------------------------------------------------------------------------------------------------------------------------------
 
 
-def parametrise(clean, band_used, minimum_points, columns):
+def parametrise(clean, band_used, minimum_points, columns, id_order):
     
     """Find best fit parameters for the polynomial model.
     
@@ -218,9 +221,8 @@ def parametrise(clean, band_used, minimum_points, columns):
     df_validband = pd.DataFrame(data={'nb_valid': (counttable >= minimum_points).sum()})
 
     clean = pd.merge(df_validband, clean, on=["object_id"])
-    clean.loc[clean['nb_valid'] != len(band_used), 'object_id'] += '_INVALID'
-    #clean = clean[clean['nb_valid'] == len(band_used)]
-    clean = clean.drop(['nb_valid'], axis=1)
+    
+    clean['valid'] = clean['nb_valid'] == len(band_used)
 
 
     # Get ids of the objects
@@ -228,6 +230,7 @@ def parametrise(clean, band_used, minimum_points, columns):
 
     # We initialise a table
     table = pd.DataFrame(data={'object_id': objects})
+    
 
     #####################################################################################
 
@@ -246,6 +249,13 @@ def parametrise(clean, band_used, minimum_points, columns):
     maxtable = clean.pivot_table(index="passband", columns="object_id", values="peak", aggfunc=lambda x: x.iloc[0])
     maxdf = pd.DataFrame(data=maxtable.unstack())
     maxdf.reset_index(inplace=True)
+    
+    validtable = clean.pivot_table(columns="object_id", values="valid", aggfunc=lambda x: x.iloc[0])
+    validdf = pd.DataFrame(data=validtable.unstack())
+    validdf.reset_index(inplace=True)
+    validdf.drop(columns=['level_1'], inplace=True)
+    validdf.rename(columns={0:'valid'}, inplace=True)
+    
 
     for i in band_used:
         # Add extra parameters
@@ -262,4 +272,8 @@ def parametrise(clean, band_used, minimum_points, columns):
 
     table = table[columns]
 
-    return table
+    id_order.rename(columns={'objectId': "object_id"}, inplace=True)
+    table = id_order.merge(table, on='object_id')
+    validdf = id_order.merge(validdf, on='object_id')
+
+    return table, validdf
