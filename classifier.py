@@ -41,8 +41,6 @@ def agn_classifier(data):
     np.array
         ordered probabilities of being an AGN
         Return -1 if the minimum number of point per passband is not respected
-        
-        
     """
     
     clean = fe.clean_data(data)
@@ -63,7 +61,7 @@ def agn_classifier(data):
 
 if __name__ == '__main__':
 
-    data = pd.read_parquet('../20alerts.parquet')
-    data = data.iloc[:100]
+    data = pd.read_parquet('20alerts.parquet')
+    data = data.iloc[:10]
     print(agn_classifier(data))
 

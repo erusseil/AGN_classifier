@@ -1,3 +1,3 @@
 BAND = ['g', 'r']
-CLASSIFIER = "RF_AGN.pkl"
+CLASSIFIER = "../Trained_classifier/RF_AGN.pkl"
 MINIMUM_POINTS = 4

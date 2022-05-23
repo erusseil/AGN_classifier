@@ -83,11 +83,11 @@ def clean_data(pdf: pd.DataFrame):
     pdf_without_nan : pd.DataFrame
          DataFrame with nan and corresponding measurement removed
     """
-        
-        # Remove NaNs
-        pdf[["cfid", "cjd", 'cmagpsf', 'csigmapsf']] = pdf[["cfid", "cjd", 'cmagpsf', 'csigmapsf']].apply(remove_nan, axis=1,result_type="expand")
 
-        return pdf
+    # Remove NaNs
+    pdf[["cfid", "cjd", 'cmagpsf', 'csigmapsf']] = pdf[["cfid", "cjd", 'cmagpsf', 'csigmapsf']].apply(remove_nan, axis=1,result_type="expand")
+    
+    return pdf
 
 
 def convert_full_dataset(clean: pd.DataFrame):
@@ -107,11 +107,11 @@ def convert_full_dataset(clean: pd.DataFrame):
     """
 
     
-    flux = pdf[['cmagpsf','csigmapsf']].apply(lambda x: mag2fluxcal_snana(x[0], x[1]), axis=1)
-    pdf[['cmagpsf','csigmapsf']] = pd.DataFrame(flux.to_list())
-    pdf = pdf.rename(columns={'cmagpsf':'cflux', 'csigmapsf':'csigflux'})
+    flux = clean[['cmagpsf','csigmapsf']].apply(lambda x: mag2fluxcal_snana(x[0], x[1]), axis=1)
+    clean[['cmagpsf','csigmapsf']] = pd.DataFrame(flux.to_list())
+    clean = clean.rename(columns={'cmagpsf':'cflux', 'csigmapsf':'csigflux'})
     
-    return pdf
+    return clean
 
 def translate(x):
     
