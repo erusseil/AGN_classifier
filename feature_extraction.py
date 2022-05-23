@@ -1,10 +1,6 @@
 import numpy as np
 import pandas as pd
 
-# Dictionnary to convert filters to PLAsTiCC format
-filter_dict = {'u':0, 'g':1, 'r':2, 'i':3, 'z':4, 'Y':5}
-
-
 def mag2fluxcal_snana(magpsf: float, sigmapsf: float):
     """ Conversion from magnitude to Fluxcal from SNANA manual
     Parameters
@@ -31,249 +27,212 @@ def mag2fluxcal_snana(magpsf: float, sigmapsf: float):
     return fluxcal, fluxcal_err
 
 
+def remove_nan(x):
+    """
+    funtion that remove nan values from list contains in columns
+    
+    Paramters
+    ---------
+    x : pd.Series
+        each rows of the dataframe. each entries must be numeric list
+        
+    Return
+    ------
+    list_without_nan : list
+        list of the same size as x, each entries is the original list from the
+        current rows without the nan values and the associated values from the other columns.
+    """
+    mask = np.equal(x['cmagpsf'], x['cmagpsf'])
+    
+    return [np.array(_col)[mask].astype(type(_col[0])) for _col in x]
 
-def convert_full_dataset(pdf: pd.DataFrame, passbands, obj_id_header='objectId'):
-    """Convert an entire data set from mag to fluxcal.
+def keep_filter(x, band):
+    """
+    funtion that remove filters other than g and r 
+    
+    Paramters
+    ---------
+    x : pd.Series
+        each rows of the dataframe. each entries must be numeric list
+        
+    Return
+    ------
+    list_without_nan : list
+        list of the same size as x, each entries is the original list from the
+        current rows without the filter other than g and r and the associated values from the other columns.
+    """
+    
+    mask = x['cfid']==band
+    
+    return [np.array(_col)[mask].astype(type(_col[0])) for _col in x]
+
+
+def clean_data(pdf: pd.DataFrame):
+    
+        """
+    Remove all nan values from 'cmagpsf' along with the corresponding values
+    inside "cfid", "cjd", 'csigmapsf'.
+    
+    Paramters
+    ---------
+    pdf : pd.DataFrame 
+        Dataframe of alerts from Fink
+        Columns are : 'objectId', 'cjd', 'cmagpsf', 'csigmapsf', 'cfid'
+        
+    Return
+    ------
+    pdf_without_nan : pd.DataFrame
+         DataFrame with nan and corresponding measurement removed
+    """
+        
+        # Remove NaNs
+        pdf[["cfid", "cjd", 'cmagpsf', 'csigmapsf']] = pdf[["cfid", "cjd", 'cmagpsf', 'csigmapsf']].apply(remove_nan, axis=1,result_type="expand")
+
+        return pdf
+
+
+def convert_full_dataset(pdf: pd.DataFrame):
+
+    
+    flux = pdf[['cmagpsf','csigmapsf']].apply(lambda x: mag2fluxcal_snana(x[0], x[1]), axis=1)
+    pdf[['cmagpsf','csigmapsf']] = pd.DataFrame(flux.to_list())
+    pdf = pdf.rename(columns={'cmagpsf':'cflux', 'csigmapsf':'csigflux'})
+    
+    return pdf
+
+def translate(x):
+    
+    """Translate a cjd list by substracting min
     
     Parameters
     ----------
-    pdf: pd.DataFrame
-        Read directly from parquet files.
-    passbands: list
-        List of all passbands used in the dataset
-    obj_id_header: str (optional)
-        Object identifier. Options are ['objectId', 'candid'].
-        Default is 'candid'.
+    x: np.array
+        cjd array
         
     Returns
     -------
-    pd.DataFrame
-        Columns are ['objectId', 'MJD', 'FLT', 
-        'FLUXCAL', 'FLUXCALERR'].
+    np.array
+        Translated array. Returns empty array if input was empty
     """
-
-    # hard code ZTF filters
-    filters = passbands
-
-    lc_flux_sig = []
-
-    for index in range(pdf.shape[0]):
-
-        name = pdf[obj_id_header].values[index]
-        for f in range(1, 3):
-
-            filter_flag = np.array(pdf['cfid'].values[index]) == f
-            mjd = np.array(pdf['cjd'].values[index])[filter_flag]
-            mag = np.array(pdf['cmagpsf'].values[index])[filter_flag]
-            magerr = np.array(pdf['csigmapsf'].values[index])[filter_flag]
-
-
-            fluxcal = []
-            fluxcal_err = []
-            for k in range(len(mag)):
-                f1, f1err = mag2fluxcal_snana(mag[k], magerr[k])
-                fluxcal.append(f1)
-                fluxcal_err.append(f1err)
-        
-            for i in range(len(fluxcal)):
-                lc_flux_sig.append([name, mjd[i], filters[f - 1],
-                                    fluxcal[i], fluxcal_err[i]])
-
-    lc_flux_sig = pd.DataFrame(lc_flux_sig, columns=['id', 'MJD', 
-                                                     'FLT', 'FLUXCAL', 
-                                                     'FLUXCALERR'])
-
-    return lc_flux_sig
-
-
-def plastic_format(data, passbands, obj_id_header='objectId'):
     
-    """Transform a data set from fink format to PLAsTiCC format .
+    if len(x)==0:
+        return []
+    
+    else :
+        return x - x.min()
+    
+    
+def normalize(x, maxdf):
+    
+    """Normalize by dividing by a data frame of maximum
     
     Parameters
     ----------
-    data: pd.DataFrame
-        Fink data set.
-    passbands: list
-        List of all passbands used in the dataset
+    x: np.array
+        Values to be divided
+    max_value: float
+        maximum value used for the normalisation
+        
     Returns
     -------
-    dataset: pd.DataFrame
-        Data set in PLAsTiCC format
-        Columns are ["object_id", "passband", "mjd", 
-        "flux", "flux_err"]
+    np.array
+        Normalized array. Returns empty array if input was empty
     """
     
+    max_value = maxdf[x.index]
     
-    # Convert magnitude to flux
-    converted = convert_full_dataset(data, passbands, obj_id_header=obj_id_header)
-
-    # Rename columns 
-    transformed = converted.rename(columns={"id": "object_id",
-                              "FLT": "passband",
-                              "MJD": "mjd",
-                              "FLUXCAL":"flux",
-                              "FLUXCALERR":"flux_err"})
-
-    # Rename bands to numbers
-    transformed['passband'] = transformed['passband'].map(filter_dict)
+    if len(x)==0:
+        return []
     
-    # Finally we remove lines containing NaN values
-    remove_mask = ~transformed['flux'].isnull()
-    transformed.to_csv('before.csv')
-    dataset = transformed[remove_mask]
-    dataset.to_csv('after.csv')
+    else :
+        return x / max_value
+
+def get_max(x):
     
-    return dataset
-
-
-def clean_data(data, band_used):
+    """Returns maximum of an array. Returns -1 if array is empty
     
-    """
-    Apply passband cuts, normalize flux and translate mjd to construct a standardize database.
-
     Parameters
     ----------
-    data: pd.DataFrame 
-        The light curve data from PLAsTiCC zenodo files.
-    band_used: list
-       List of all the passband you want to keep 
-       (all possible bands : ['u','g','r','i','z','Y'].
-
+    x: np.array
+        
     Returns
     -------
-    clean: pd.DataFrame
-        A normalized and mjd translated version of the data. 
-        Contains only desired passbands
+    float
+        Maximum of the array or -1 if array is empty
     """
-
-    #--------------------------------------------------------------------------------
-
-    #Filter the passband
-
-    #---------------------------------------------------------------------------------
-
-    to_fuse=[]
-    
-    for i in (pd.Series(band_used).map(filter_dict)):
-        to_fuse.append(data.loc[data['passband']==i])
-
-    clean = pd.concat(to_fuse)
-
-    #---------------------------------------------------------------------------------
-
-    # Translate the mjd
-
-    #---------------------------------------------------------------------------------
-
-
-    mintable = clean.pivot_table(index="passband", columns="object_id", values="mjd", aggfunc='min')
-    mindf = pd.DataFrame(data=mintable.unstack())
-    clean = pd.merge(mindf, clean, on=["object_id", "passband"])
-    clean['mjd'] = clean['mjd']-clean[0]
-    clean = clean.drop([0], axis=1)
-
-    #---------------------------------------------------------------------------------
-
-    # Normalise the flux
-
-    #---------------------------------------------------------------------------------
-    
-    maxtable = clean.pivot_table(index="passband", columns="object_id", values="flux", aggfunc='max')
-    maxdf = pd.DataFrame(data=maxtable.unstack())
-    clean = pd.merge(maxdf, clean, on=["object_id", "passband"])
-    clean['flux'] = clean['flux']/clean[0]
-    clean['flux_err'] = clean['flux_err'] / clean[0]
-    clean = clean.drop([0], axis=1)
-    
-    # Merge peaktable with data
-    clean = pd.merge(maxdf, clean, on=["object_id", "passband"])
-    clean = clean.rename(columns={0: "peak"})
         
-    return clean
-
-#--------------------------------------------------------------------------------------------------------------------------------------------
-
-
-def parametrise(clean, band_used, minimum_points, columns, id_order):
+    if len(x)==0:
+        return -1
     
-    """Find best fit parameters for the polynomial model.
-    
-    Parameters
-    ----------
-    clean: pd.DataFrame
-        Lightcurves dataframe to parametrize.
-    band_used: list
-       List of all the passband you want to keep 
-       (all possible bands : ['u','g','r','i','z','Y'].
-    """
-
-    band_used = pd.Series(band_used).map(filter_dict)
-    
-    np.seterr(all='ignore')
-
-    ##### FILTER OBJECTS WITH LESS THAN THE MINIMUM NUMBER OF POINTS PER PASSBAND
-
-    # Create a table describing how many points exist for each bands and each object
-    counttable = clean.pivot_table(index="passband", columns="object_id", values="mjd", aggfunc=lambda x: len(x))
-
-    # Create a table describing how many bands are complete for each object
-    df_validband = pd.DataFrame(data={'nb_valid': (counttable >= minimum_points).sum()})
-
-    clean = pd.merge(df_validband, clean, on=["object_id"])
-    
-    clean['valid'] = clean['nb_valid'] == len(band_used)
-
-
-    # Get ids of the objects
-    objects = np.unique(clean['object_id'])
-
-    # We initialise a table
-    table = pd.DataFrame(data={'object_id': objects})
+    else :
+        return x.max()
     
 
-    #####################################################################################
 
-    # CONSTRUCT TABLE
-
-    #####################################################################################
-
-    stdtable = clean.pivot_table(index="passband", columns="object_id", values="flux", aggfunc=lambda x: np.std(x))
-    stddf = pd.DataFrame(data=stdtable.unstack())
-    stddf.reset_index(inplace=True)
-
-    counttable = clean.pivot_table(index="passband", columns="object_id", values="flux", aggfunc=lambda x: len(x))
-    countdf = pd.DataFrame(data=counttable.unstack())
-    countdf.reset_index(inplace=True)
-
-    maxtable = clean.pivot_table(index="passband", columns="object_id", values="peak", aggfunc=lambda x: x.iloc[0])
-    maxdf = pd.DataFrame(data=maxtable.unstack())
-    maxdf.reset_index(inplace=True)
+def transform_data(converted):
     
-    validtable = clean.pivot_table(columns="object_id", values="valid", aggfunc=lambda x: x.iloc[0])
-    validdf = pd.DataFrame(data=validtable.unstack())
-    validdf.reset_index(inplace=True)
-    validdf.drop(columns=['level_1'], inplace=True)
-    validdf.rename(columns={0:'valid'}, inplace=True)
+    # Create a dataframe with only measurement from band 1 
+    transformed_1 = converted.copy()
+    transformed_1[["cfid", "cjd", 'cflux', 'csigflux']] = transformed_1[["cfid", "cjd", 'cflux', 'csigflux']].apply(keep_filter, args=(1,), axis=1,result_type="expand")
+
+    # Create a dataframe with only measurement from band 2
+    transformed_2 = converted.copy()
+    transformed_2[["cfid", "cjd", 'cflux', 'csigflux']] = transformed_2[["cfid", "cjd", 'cflux', 'csigflux']].apply(keep_filter, args=(2,), axis=1,result_type="expand")
     
+    
+    
+    for df in [transformed_1, transformed_2]:
+        
+        df['cjd'] = df['cjd'].apply(translate)
+        
+        maxdf = df['cflux'].apply(get_max)
+        
+        df[['cflux']] = df[['cflux']].apply(normalize, args=(maxdf,))
+        df[['csigflux']] = df[['csigflux']].apply(normalize, args=(maxdf,))
+        
+        df['peak'] = maxdf
+    
+    
+    return transformed_1, transformed_2
 
-    for i in band_used:
-        # Add extra parameters
 
-        table = pd.merge(maxdf.loc[maxdf['passband'] == i, ['object_id', 0]], table, on=["object_id"])
-        table = table.rename(columns={0: f"peak_{i}"})
+def parametrise(transformed, minimum_points, band):
 
-        table = pd.merge(countdf.loc[countdf['passband'] == i, ['object_id', 0]], table, on=["object_id"])
-        table = table.rename(columns={0: f"nb_points_{i}"})
+    
+    nb_points = transformed['cflux'].apply(lambda x: len(x))
+    peak = transformed['peak']
+    std = transformed['cflux'].apply(np.std)
+    ids = transformed['objectId']
+  
+    valid = nb_points>= minimum_points
+    
+    df_parameters = pd.DataFrame(data = {'object_id':ids,
+                                         f'std_{band}':std,
+                                         f'peak_{band}':peak,
+                                         f'nb_points_{band}':nb_points,
+                                         f'valid_{band}':valid})
 
-        table = pd.merge(stddf.loc[stddf['passband'] == i, ['object_id', 0]], table, on=["object_id"])
-        table = table.rename(columns={0: f"std_{i}"})
+    return df_parameters
 
 
-    table = table[columns]
+def merge_features(features_1, features_2):
+        
+    features = pd.merge(features_1, features_2, on='object_id')
+    valid = features['valid_1'] & features['valid_2']
+    features = features.drop(columns=['valid_1', 'valid_2'])
 
-    id_order.rename(columns={'objectId': "object_id"}, inplace=True)
-    table = id_order.merge(table, on='object_id')
-    validdf = id_order.merge(validdf, on='object_id')
+    features = features[['object_id', 'std_1', 'std_2', 'peak_1', 'peak_2', 'nb_points_1', 'nb_points_2']]
 
-    return table, validdf
+    return features, valid
+
+def get_probabilities(clf, features, valid):
+    
+    final_proba = np.array([-1]*len(features['object_id'])).astype(np.float64)
+
+    agn_or_not = clf.predict_proba(features.loc[valid].iloc[:, 1:])
+
+    index_to_replace = features.loc[valid].iloc[:, 1:].index
+
+    final_proba[index_to_replace.values] = agn_or_not[:, 0]
+    
+    return final_proba
