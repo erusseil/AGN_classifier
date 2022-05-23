@@ -12,12 +12,13 @@ import pandas as pd
 
 def load_classifier():
     """
-    load the random forest classifier trained to recognize the AGN (pickle format).
+    load the random forest classifier trained to recognize the AGN
+    on binary cases : AGNs vs non-AGNs  (pickle format).
     
     Returns
     ----------
     RandomForestClassifier
-        Trained on binary cases : AGNs vs non-AGNs
+        
     
     """
     with open(k.CLASSIFIER, 'rb') as f:
@@ -37,7 +38,9 @@ def agn_classifier(data):
         
     Returns
     ----------
-    RandomForestClassifier
+    np.array
+        ordered probabilities of being an AGN
+        Return -1 if the minimum number of point per passband is not respected
         
         
     """

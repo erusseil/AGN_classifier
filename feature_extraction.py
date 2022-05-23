@@ -46,20 +46,21 @@ def remove_nan(x):
     
     return [np.array(_col)[mask].astype(type(_col[0])) for _col in x]
 
+
 def keep_filter(x, band):
     """
-    funtion that remove filters other than g and r 
+    funtion that removes points fron other bands than the one specified
     
-    Paramters
+    Parameters
     ---------
     x : pd.Series
         each rows of the dataframe. each entries must be numeric list
         
     Return
     ------
-    list_without_nan : list
+    list_with_oneband : list
         list of the same size as x, each entries is the original list from the
-        current rows without the filter other than g and r and the associated values from the other columns.
+        current rows with only the wanted filter and the associated values from the other columns.
     """
     
     mask = x['cfid']==band
@@ -68,8 +69,7 @@ def keep_filter(x, band):
 
 
 def clean_data(pdf: pd.DataFrame):
-    
-        """
+    """
     Remove all nan values from 'cmagpsf' along with the corresponding values
     inside "cfid", "cjd", 'csigmapsf'.
     
@@ -77,7 +77,6 @@ def clean_data(pdf: pd.DataFrame):
     ---------
     pdf : pd.DataFrame 
         Dataframe of alerts from Fink
-        Columns are : 'objectId', 'cjd', 'cmagpsf', 'csigmapsf', 'cfid'
         
     Return
     ------
@@ -91,7 +90,21 @@ def clean_data(pdf: pd.DataFrame):
         return pdf
 
 
-def convert_full_dataset(pdf: pd.DataFrame):
+def convert_full_dataset(clean: pd.DataFrame):
+    """
+    Convert all mag and mag err to flux and flux err
+    
+    Paramters
+    ---------
+    clean : pd.DataFrame 
+        Dataframe of alerts from Fink with nan removed
+        
+    Return
+    ------
+    pd.DataFrame
+         DataFrame with column cmagpsf replaced with cflux 
+         and column csigmagpsf replaced with csigflux
+    """
 
     
     flux = pdf[['cmagpsf','csigmapsf']].apply(lambda x: mag2fluxcal_snana(x[0], x[1]), axis=1)
@@ -171,6 +184,28 @@ def get_max(x):
 
 def transform_data(converted):
     
+    """ Apply transformations for each band on a flux converted dataset
+            - Shift cjd so that the first point is at 0
+            - Normalize by dividing flux and flux err by the maximum flux
+            - Add a column with maxflux before normalization
+    
+    
+    Parameters
+    ----------
+    converted : pd.DataFrame 
+        Dataframe of alerts from Fink with nan removed and converted to flux
+        
+    Returns
+    -------
+    transformed_1 : pd.DataFrame
+        Transformed DataFrame that only contains passband g
+        
+    
+    transformed_2 : pd.DataFrame
+        Transformed DataFrame that only contains passband r
+        
+    """
+    
     # Create a dataframe with only measurement from band 1 
     transformed_1 = converted.copy()
     transformed_1[["cfid", "cjd", 'cflux', 'csigflux']] = transformed_1[["cfid", "cjd", 'cflux', 'csigflux']].apply(keep_filter, args=(1,), axis=1,result_type="expand")
@@ -197,6 +232,28 @@ def transform_data(converted):
 
 
 def parametrise(transformed, minimum_points, band):
+    
+    """Extract parameters from a transformed dataset. Construct a new DataFrame
+    Parameters are :  - 'nb_points' : number of points
+                      - 'std' : standard deviation of the flux
+                      - 'peak' : maximum before normalization
+                      - 'valid' : is the number of point above the minimum (boolean)
+    
+    Parameters
+    ----------
+    transformed : pd.DataFrame
+        Transformed DataFrame that only contains a single passband 
+    minimum_points : int
+        Minimum number of points in that passband to be considered valid
+    band : int
+        Passband of the dataframe
+        
+    Returns
+    -------
+    df_parameters : pd.DataFrame
+        DataFrame of parameters with columns 
+        ['object_id', 'std', 'peak', 'nb_points', 'valid']
+    """
 
     
     nb_points = transformed['cflux'].apply(lambda x: len(x))
@@ -216,6 +273,25 @@ def parametrise(transformed, minimum_points, band):
 
 
 def merge_features(features_1, features_2):
+    
+    """Merge feature tables of band g and r. 
+    Also merge valid columns into one
+    
+    Parameters
+    ----------
+    features_1: pd.DataFrame
+        features of band g
+    features_2: pd.DataFrame
+        features of band r
+        
+    Returns
+    -------
+    features : pd.DataFrame
+        Merged features with valid column dropped
+        
+    valid : np.array
+        Bool array, indicates if both passband respect the minimum number of points
+    """
         
     features = pd.merge(features_1, features_2, on='object_id')
     valid = features['valid_1'] & features['valid_2']
@@ -226,6 +302,27 @@ def merge_features(features_1, features_2):
     return features, valid
 
 def get_probabilities(clf, features, valid):
+    
+    """Returns probabilty of being an AGN predicted by the classfier
+    
+    Parameters
+    ----------
+    clf: RandomForestClassifier
+        Binary AGN vs non AGN classifier
+        
+    features: pd.DataFrame
+        Features extracted from the objects. 
+        Outputed by merge_features
+        
+    valid: np.array
+        Bool array, indicates if both passband respect the minimum number of points
+        
+    Returns
+    -------
+    final_proba : np.array
+        ordered probabilities of being an AGN
+        
+    """
     
     final_proba = np.array([-1]*len(features['object_id'])).astype(np.float64)
 
