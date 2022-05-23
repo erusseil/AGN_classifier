@@ -83,7 +83,9 @@ def clean_data(pdf: pd.DataFrame):
     pdf_without_nan : pd.DataFrame
          DataFrame with nan and corresponding measurement removed
     """
-
+    
+    pdf = pdf.reset_index(drop=True)
+    
     # Remove NaNs
     pdf[["cfid", "cjd", 'cmagpsf', 'csigmapsf']] = pdf[["cfid", "cjd", 'cmagpsf', 'csigmapsf']].apply(remove_nan, axis=1,result_type="expand")
     
