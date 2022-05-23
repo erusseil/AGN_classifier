@@ -43,6 +43,8 @@ def agn_classifier(data):
         Return -1 if the minimum number of point per passband is not respected
     """
     
+    data = data.reset_index(drop=True)
+    
     clean = fe.clean_data(data)
     converted = fe.convert_full_dataset(clean)
     transformed_1, transformed_2 = fe.transform_data(converted)
