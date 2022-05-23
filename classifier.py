@@ -12,7 +12,13 @@ import pandas as pd
 
 def load_classifier():
     """
-    load the random forest classifier trained to recognize the AGN.
+    load the random forest classifier trained to recognize the AGN (pickle format).
+    
+    Returns
+    ----------
+    RandomForestClassifier
+        Trained on binary cases : AGNs vs non-AGNs
+    
     """
     with open(k.CLASSIFIER, 'rb') as f:
         clf = pickle.load(f)
@@ -28,26 +34,28 @@ def agn_classifier(data):
     ----------
     data : DataFrame
         alerts from fink with aggregated lightcurves
+        
+    Returns
+    ----------
+    RandomForestClassifier
+        
+        
     """
     
-    id_order = data[['objectId']]
+    clean = fe.clean_data(data)
+    converted = fe.convert_full_dataset(clean)
+    transformed_1, transformed_2 = fe.transform_data(converted)
     
-    data_plasticc = fe.plastic_format(data, k.BAND)
-    clean = fe.clean_data(data_plasticc, k.BAND)
-    features, validdf = fe.parametrise(clean, k.BAND, k.MINIMUM_POINTS, k.COLUMNS, id_order)
+    features_1 = fe.parametrise(transformed_1, k.MINIMUM_POINTS, 1)
+    features_2 = fe.parametrise(transformed_2, k.MINIMUM_POINTS, 2)
+    
+    features, valid = fe.merge_features(features_1, features_2)
 
     clf = rfc.load_classifier()
+    
+    proba = fe.get_probabilities(clf, features, valid)
 
-    final_proba = np.array([-1]*len(features['object_id'])).astype(np.float64)
-
-    agn_or_not = clf.predict_proba(features.loc[validdf['valid']].iloc[:, 1:])
-
-    index_to_replace = features.loc[validdf['valid']].iloc[:, 1:].index
-
-    final_proba[index_to_replace.values] = agn_or_not[:, 0]
-
-
-    return final_proba
+    return proba
 
 
 if __name__ == '__main__':
