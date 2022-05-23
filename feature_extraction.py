@@ -208,6 +208,7 @@ def transform_data(converted):
     
     # Create a dataframe with only measurement from band 1 
     transformed_1 = converted.copy()
+
     transformed_1[["cfid", "cjd", 'cflux', 'csigflux']] = transformed_1[["cfid", "cjd", 'cflux', 'csigflux']].apply(keep_filter, args=(1,), axis=1,result_type="expand")
 
     # Create a dataframe with only measurement from band 2
@@ -293,7 +294,10 @@ def merge_features(features_1, features_2):
         Bool array, indicates if both passband respect the minimum number of points
     """
         
-    features = pd.merge(features_1, features_2, on='object_id')
+    # Avoid having twice the 'object_id' column
+    features_2 = features_2.drop(columns={'object_id'})
+    
+    features = features_1.join(features_2)
     valid = features['valid_1'] & features['valid_2']
     features = features.drop(columns=['valid_1', 'valid_2'])
 
