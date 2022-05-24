@@ -306,7 +306,7 @@ def parametrise(transformed, minimum_points, band, target_col='', mean_snr=False
     return df_parameters
 
 
-def merge_features(features_1, features_2, target_col=''):
+def merge_features(features_1, features_2, target_col='', mean_snr=False, std_snr=False):
     
     """Merge feature tables of band g and r. 
     Also merge valid columns into one
@@ -339,14 +339,24 @@ def merge_features(features_1, features_2, target_col=''):
     features = features_1.join(features_2)
     valid = features['valid_1'] & features['valid_2']
     features = features.drop(columns=['valid_1', 'valid_2'])
+    
 
-    if target_col == '':
-        features = features[['object_id', 'std_1', 'std_2', 'peak_1', 'peak_2', 'nb_points_1', 'nb_points_2']]
+    ordered_features = features[['object_id', 'std_1', 'std_2', 'peak_1', 'peak_2', 'nb_points_1', 'nb_points_2']].copy()
+    
+    
+    if mean_snr :
+        ordered_features['mean_snr_1'] = features['mean_snr_1']
+        ordered_features['mean_snr_2'] = features['mean_snr_2']
         
-    else:
-        features = features[['object_id', 'std_1', 'std_2', 'peak_1', 'peak_2', 'nb_points_1', 'nb_points_2', target_col]]
+    if std_snr :
+        ordered_features['std_snr_1'] = features['std_snr_1']
+        ordered_features['std_snr_2'] = features['std_snr_2']
+    
+    if target_col != '':
+        ordered_features[target_col] = features[target_col]
+    
         
-    return features, valid
+    return ordered_features, valid
 
 def get_probabilities(clf, features, valid):
     
