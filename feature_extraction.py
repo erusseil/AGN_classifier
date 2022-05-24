@@ -182,6 +182,22 @@ def get_max(x):
     else :
         return x.max()
     
+def compute_snr(pdf):
+    """Compute a new column : signal to noise ratio
+    
+    Parameters
+    ----------
+    pdf: pd.DataFrame 
+        Dataframe of alerts from Fink with nan removed and converted to flux
+        Must contain columns ['cflux', 'csigflux']
+        
+    Returns
+    -------
+    pd.Series
+        Signal to noise ratio
+    """
+    return pdf['cflux']/pdf['csigflux']
+    
 
 
 def transform_data(converted):
@@ -227,13 +243,14 @@ def transform_data(converted):
         
         df[['cflux']] = df[['cflux']].apply(normalize, args=(maxdf,))
         df[['csigflux']] = df[['csigflux']].apply(normalize, args=(maxdf,))
+        df['snr'] = df[['cflux', 'csigflux']].apply(compute_snr, axis=1)
         
         df['peak'] = maxdf
     
     return transformed_1, transformed_2
 
 
-def parametrise(transformed, minimum_points, band, target_col=''):
+def parametrise(transformed, minimum_points, band, target_col='', mean_snr=False, std_snr=False):
     
     """Extract parameters from a transformed dataset. Construct a new DataFrame
     Parameters are :  - 'nb_points' : number of points
@@ -264,28 +281,28 @@ def parametrise(transformed, minimum_points, band, target_col=''):
     peak = transformed['peak']
     std = transformed['cflux'].apply(np.std)
     ids = transformed['objectId']
-  
+        
     valid = nb_points>= minimum_points
     
-    if target_col == '':
-        
-        df_parameters = pd.DataFrame(data = {'object_id':ids,
-                                             f'std_{band}':std,
-                                             f'peak_{band}':peak,
-                                             f'nb_points_{band}':nb_points,
-                                             f'valid_{band}':valid})
-    
-    else :
-        
-        targets = transformed[target_col]
-        
-        df_parameters = pd.DataFrame(data = {'object_id':ids,
+    df_parameters = pd.DataFrame(data = {'object_id':ids,
                                      f'std_{band}':std,
                                      f'peak_{band}':peak,
                                      f'nb_points_{band}':nb_points,
-                                     f'valid_{band}':valid,
-                                     'target':targets})
+                                     f'valid_{band}':valid})
+    
+    if mean_snr :
+        mean_snr = transformed['snr'].apply(np.mean)
+        df_parameters[f'mean_snr_{band}'] = mean_snr
+        
+    if std_snr :
+        std_snr = transformed['snr'].apply(np.std)
+        df_parameters[f'std_snr_{band}'] = std_snr
+    
+    if target_col != '':
+        targets = transformed[target_col]
+        df_parameters['target'] = targets
 
+        
     return df_parameters
 
 
