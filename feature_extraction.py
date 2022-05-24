@@ -230,11 +230,10 @@ def transform_data(converted):
         
         df['peak'] = maxdf
     
-    
     return transformed_1, transformed_2
 
 
-def parametrise(transformed, minimum_points, band):
+def parametrise(transformed, minimum_points, band, target_col=''):
     
     """Extract parameters from a transformed dataset. Construct a new DataFrame
     Parameters are :  - 'nb_points' : number of points
@@ -250,6 +249,8 @@ def parametrise(transformed, minimum_points, band):
         Minimum number of points in that passband to be considered valid
     band : int
         Passband of the dataframe
+    target_col: str
+        If inputed a non empty str, add the corresponding column as a target column
         
     Returns
     -------
@@ -266,16 +267,29 @@ def parametrise(transformed, minimum_points, band):
   
     valid = nb_points>= minimum_points
     
-    df_parameters = pd.DataFrame(data = {'object_id':ids,
-                                         f'std_{band}':std,
-                                         f'peak_{band}':peak,
-                                         f'nb_points_{band}':nb_points,
-                                         f'valid_{band}':valid})
+    if target_col == '':
+        
+        df_parameters = pd.DataFrame(data = {'object_id':ids,
+                                             f'std_{band}':std,
+                                             f'peak_{band}':peak,
+                                             f'nb_points_{band}':nb_points,
+                                             f'valid_{band}':valid})
+    
+    else :
+        
+        targets = transformed[target_col]
+        
+        df_parameters = pd.DataFrame(data = {'object_id':ids,
+                                     f'std_{band}':std,
+                                     f'peak_{band}':peak,
+                                     f'nb_points_{band}':nb_points,
+                                     f'valid_{band}':valid,
+                                     'target':targets})
 
     return df_parameters
 
 
-def merge_features(features_1, features_2):
+def merge_features(features_1, features_2, target_col=''):
     
     """Merge feature tables of band g and r. 
     Also merge valid columns into one
@@ -286,6 +300,8 @@ def merge_features(features_1, features_2):
         features of band g
     features_2: pd.DataFrame
         features of band r
+    target_col: str
+        If inputed a non empty str, add the corresponding column as a target column
         
     Returns
     -------
@@ -296,15 +312,23 @@ def merge_features(features_1, features_2):
         Bool array, indicates if both passband respect the minimum number of points
     """
         
-    # Avoid having twice the 'object_id' column
-    features_2 = features_2.drop(columns={'object_id'})
+    # Avoid having twice the same column
+    
+    if target_col == '':
+        features_2 = features_2.drop(columns={'object_id'})
+    else:
+        features_2 = features_2.drop(columns={'object_id', target_col})
     
     features = features_1.join(features_2)
     valid = features['valid_1'] & features['valid_2']
     features = features.drop(columns=['valid_1', 'valid_2'])
 
-    features = features[['object_id', 'std_1', 'std_2', 'peak_1', 'peak_2', 'nb_points_1', 'nb_points_2']]
-
+    if target_col == '':
+        features = features[['object_id', 'std_1', 'std_2', 'peak_1', 'peak_2', 'nb_points_1', 'nb_points_2']]
+        
+    else:
+        features = features[['object_id', 'std_1', 'std_2', 'peak_1', 'peak_2', 'nb_points_1', 'nb_points_2', target_col]]
+        
     return features, valid
 
 def get_probabilities(clf, features, valid):
