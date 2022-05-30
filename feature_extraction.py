@@ -1,5 +1,7 @@
-import numpy as np
 import pandas as pd
+from iminuit import Minuit
+from iminuit.cost import LeastSquares
+from models import *
 
 def mag2fluxcal_snana(magpsf: float, sigmapsf: float):
     """ Conversion from magnitude to Fluxcal from SNANA manual
@@ -115,14 +117,14 @@ def convert_full_dataset(clean: pd.DataFrame):
     
     return clean
 
-def translate(x):
+def translate(pdf):
     
-    """Translate a cjd list by substracting min
+    """Translate a cjd list by substracting maxflux point
     
     Parameters
     ----------
-    x: np.array
-        cjd array
+    pdf: pd.DataFrame
+        Must contain ['cjd', 'cflux']
         
     Returns
     -------
@@ -130,11 +132,11 @@ def translate(x):
         Translated array. Returns empty array if input was empty
     """
     
-    if len(x)==0:
+    if len(pdf['cjd'])==0:
         return []
     
     else :
-        return x - x.min()
+        return pdf['cjd'] - pdf['cjd'][np.argmax(pdf['cflux'])]
     
     
 def normalize(x, maxdf):
@@ -203,7 +205,7 @@ def compute_snr(pdf):
 def transform_data(converted):
     
     """ Apply transformations for each band on a flux converted dataset
-            - Shift cjd so that the first point is at 0
+            - Shift cjd so that the max flux point is at 0
             - Normalize by dividing flux and flux err by the maximum flux
             - Add a column with maxflux before normalization
     
@@ -237,7 +239,7 @@ def transform_data(converted):
     
     for df in [transformed_1, transformed_2]:
         
-        df['cjd'] = df['cjd'].apply(translate)
+        df['cjd'] = df.apply(translate, axis=1)
         
         maxdf = df['cflux'].apply(get_max)
         
@@ -250,7 +252,36 @@ def transform_data(converted):
     return transformed_1, transformed_2
 
 
-def parametrise(transformed, minimum_points, band, target_col='', mean_snr=False, std_snr=False):
+def parametric_bump(pdf):
+
+    parameters_dict = {'p1':0.225, 'p2':-2.5, 'p3':0.038}
+
+    least_squares = LeastSquares(pdf['cjd'], pdf['cflux'], pdf['csigflux'], bump)
+    fit = Minuit(least_squares, **parameters_dict)
+
+    fit.migrad()
+
+    parameters = []
+    for fit_v in range(len(fit.values)):
+        parameters.append(fit.values[fit_v])
+        
+    return parameters
+
+def compute_color(pdf):
+    
+    # Compute fitted values at cjd from the other band
+    add_from_2 = bump(pdf['cjd_2'], *pdf['bump_1'])
+    add_from_1 = bump(pdf['cjd_1'], *pdf['bump_2'])
+    
+    # Add to the flux list : maintain the same order : cjd from 1 then cjd from 2
+    new_cflux_1 = np.append(pdf['cflux_1'], add_from_2)
+    new_cflux_2 = np.append(add_from_1, pdf['cflux_2'])
+    
+    # Return g-r
+    return new_cflux_1-new_cflux_2
+
+def parametrise(transformed, minimum_points, band, target_col='',
+                mean_snr=False, std_snr=False, mean_color=False, std_color=False):
     
     """Extract parameters from a transformed dataset. Construct a new DataFrame
     Parameters are :  - 'nb_points' : number of points
@@ -301,12 +332,21 @@ def parametrise(transformed, minimum_points, band, target_col='', mean_snr=False
     if target_col != '':
         targets = transformed[target_col]
         df_parameters['target'] = targets
-
+        
+    if mean_color | std_color :
+        # The bump function is built to fit transient centered on 40
+        transformed['cjd'] = transformed['cjd'].apply(lambda x: np.array(x) + 40)
+        bump_parameters = transformed.apply(parametric_bump, axis=1)
+        df_parameters[f'bump_{band}'] = bump_parameters
+        
+        df_parameters[f'cflux_{band}'] = transformed['cflux']
+        df_parameters[f'cjd_{band}'] = transformed['cjd']
         
     return df_parameters
 
 
-def merge_features(features_1, features_2, target_col='', mean_snr=False, std_snr=False):
+def merge_features(features_1, features_2, target_col='',
+                   mean_snr=False, std_snr=False, mean_color=False, std_color=False):
     
     """Merge feature tables of band g and r. 
     Also merge valid columns into one
@@ -351,12 +391,22 @@ def merge_features(features_1, features_2, target_col='', mean_snr=False, std_sn
     if std_snr :
         ordered_features['std_snr_1'] = features['std_snr_1']
         ordered_features['std_snr_2'] = features['std_snr_2']
+        
+    if mean_color | std_color :
+        
+        color = features.apply(compute_color, axis=1)
+
+        if mean_color :
+            ordered_features['mean_color'] = color.apply(np.mean)
+            
+        if std_color :
+            ordered_features['std_color'] = color.apply(np.std)
     
     if target_col != '':
         ordered_features[target_col] = features[target_col]
-    
         
     return ordered_features, valid
+
 
 def get_probabilities(clf, features, valid):
     
