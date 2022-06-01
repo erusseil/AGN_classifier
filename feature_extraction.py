@@ -254,7 +254,7 @@ def transform_data(converted):
 
 def parametric_bump(pdf):
 
-    parameters_dict = {'p1':0.225, 'p2':-2.5, 'p3':0.038}
+    parameters_dict = {'p1':0.225, 'p2':-2.5, 'p3':0.038, 'p4':0}
 
     least_squares = LeastSquares(pdf['cjd'], pdf['cflux'], pdf['csigflux'], bump)
     fit = Minuit(least_squares, **parameters_dict)
@@ -280,8 +280,23 @@ def compute_color(pdf):
     # Return g-r
     return new_cflux_1-new_cflux_2
 
+def compute_slope_color(pdf):
+    
+    diff = np.max(pdf['color'])-np.min(pdf['color'])
+    
+    # Band 1 then band 2 : the same way color was computed
+    cjd = np.append(pdf['cjd_1'], pdf['cjd_2'])
+    dist = cjd[np.argmax(pdf['color'])] - cjd[np.argmin(pdf['color'])]
+
+    if dist == 0:
+        return 0
+    
+    else :
+        return diff/dist
+
+
 def parametrise(transformed, minimum_points, band, target_col='',
-                mean_snr=False, std_snr=False, mean_color=False, std_color=False):
+                mean_snr=False, std_snr=False, mean_color=False, std_color=False, max_color=False, slope_color=False):
     
     """Extract parameters from a transformed dataset. Construct a new DataFrame
     Parameters are :  - 'nb_points' : number of points
@@ -333,7 +348,7 @@ def parametrise(transformed, minimum_points, band, target_col='',
         targets = transformed[target_col]
         df_parameters['target'] = targets
         
-    if mean_color | std_color :
+    if mean_color | std_color | max_color | slope_color :
         # The bump function is built to fit transient centered on 40
         transformed['cjd'] = transformed['cjd'].apply(lambda x: np.array(x) + 40)
         bump_parameters = transformed.apply(parametric_bump, axis=1)
@@ -346,7 +361,7 @@ def parametrise(transformed, minimum_points, band, target_col='',
 
 
 def merge_features(features_1, features_2, target_col='',
-                   mean_snr=False, std_snr=False, mean_color=False, std_color=False):
+                   mean_snr=False, std_snr=False, mean_color=False, std_color=False, max_color=False, slope_color=False):
     
     """Merge feature tables of band g and r. 
     Also merge valid columns into one
@@ -392,7 +407,7 @@ def merge_features(features_1, features_2, target_col='',
         ordered_features['std_snr_1'] = features['std_snr_1']
         ordered_features['std_snr_2'] = features['std_snr_2']
         
-    if mean_color | std_color :
+    if mean_color | std_color | max_color :
         
         color = features.apply(compute_color, axis=1)
 
@@ -401,6 +416,13 @@ def merge_features(features_1, features_2, target_col='',
             
         if std_color :
             ordered_features['std_color'] = color.apply(np.std)
+            
+        if max_color :
+            ordered_features['max_color'] = color.apply(np.max)
+            
+        if slope_color:
+            features['color'] = color
+            ordered_features['slope_color'] = features.apply(compute_slope_color, axis=1)
     
     if target_col != '':
         ordered_features[target_col] = features[target_col]

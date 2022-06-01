@@ -13,14 +13,14 @@ def sig(x):
     return 1/(1+protected_exponent(-x))
 
 
-def bump(x, p1, p2, p3):
+def bump(x, p1, p2, p3, p4):
     """ Parametric function, fit transient behavior
     
     Parameters
     ----------
     x : np.array 
         Array of mjd translated to 0
-    p1,p2,p3 : floats
+    p1,p2,p3, p4 : floats
         Parameters of the function
         
     Returns
@@ -29,6 +29,6 @@ def bump(x, p1, p2, p3):
         Flux array
     """
     
-    return sig(p1*x + p2 - protected_exponent(p3*x))
+    return sig(p1*x + p2 - protected_exponent(p3*x)) + p4
 
 
