@@ -199,7 +199,6 @@ def compute_snr(pdf):
         Signal to noise ratio
     """
     return pdf['cflux']/pdf['csigflux']
-    
 
 
 def transform_data(converted):
@@ -234,8 +233,6 @@ def transform_data(converted):
     # Create a dataframe with only measurement from band 2
     transformed_2 = converted.copy()
     transformed_2[["cfid", "cjd", 'cflux', 'csigflux']] = transformed_2[["cfid", "cjd", 'cflux', 'csigflux']].apply(keep_filter, args=(2,), axis=1,result_type="expand")
-    
-    
     
     for df in [transformed_1, transformed_2]:
         
@@ -280,23 +277,8 @@ def compute_color(pdf):
     # Return g-r
     return new_cflux_1-new_cflux_2
 
-def compute_slope_color(pdf):
-    
-    diff = np.max(pdf['color'])-np.min(pdf['color'])
-    
-    # Band 1 then band 2 : the same way color was computed
-    cjd = np.append(pdf['cjd_1'], pdf['cjd_2'])
-    dist = cjd[np.argmax(pdf['color'])] - cjd[np.argmin(pdf['color'])]
 
-    if dist == 0:
-        return 0
-    
-    else :
-        return diff/dist
-
-
-def parametrise(transformed, minimum_points, band, target_col='',
-                mean_snr=False, std_snr=False, mean_color=False, std_color=False, max_color=False, slope_color=False):
+def parametrise(transformed, minimum_points, band):
     
     """Extract parameters from a transformed dataset. Construct a new DataFrame
     Parameters are :  - 'nb_points' : number of points
@@ -326,42 +308,33 @@ def parametrise(transformed, minimum_points, band, target_col='',
     nb_points = transformed['cflux'].apply(lambda x: len(x))
     peak = transformed['peak']
     std = transformed['cflux'].apply(np.std)
+    mean_snr = transformed['snr'].apply(np.mean)
     ids = transformed['objectId']
+    
         
     valid = nb_points>= minimum_points
     
     df_parameters = pd.DataFrame(data = {'object_id':ids,
                                      f'std_{band}':std,
                                      f'peak_{band}':peak,
+                                     f'mean_snr_{band}':mean_snr,
                                      f'nb_points_{band}':nb_points,
                                      f'valid_{band}':valid})
-    
-    if mean_snr :
-        mean_snr = transformed['snr'].apply(np.mean)
-        df_parameters[f'mean_snr_{band}'] = mean_snr
         
-    if std_snr :
-        std_snr = transformed['snr'].apply(np.std)
-        df_parameters[f'std_snr_{band}'] = std_snr
-    
-    if target_col != '':
-        targets = transformed[target_col]
-        df_parameters['target'] = targets
-        
-    if mean_color | std_color | max_color | slope_color :
-        # The bump function is built to fit transient centered on 40
-        transformed['cjd'] = transformed['cjd'].apply(lambda x: np.array(x) + 40)
-        bump_parameters = transformed.apply(parametric_bump, axis=1)
-        df_parameters[f'bump_{band}'] = bump_parameters
-        
-        df_parameters[f'cflux_{band}'] = transformed['cflux']
-        df_parameters[f'cjd_{band}'] = transformed['cjd']
+
+    # Compute missing values for the color
+    # The bump function is built to fit transient centered on 40
+    transformed['cjd'] = transformed['cjd'].apply(lambda x: np.array(x) + 40)
+    bump_parameters = transformed.apply(parametric_bump, axis=1)
+    df_parameters[f'bump_{band}'] = bump_parameters
+
+    df_parameters[f'cflux_{band}'] = transformed['cflux']
+    df_parameters[f'cjd_{band}'] = transformed['cjd']
         
     return df_parameters
 
 
-def merge_features(features_1, features_2, target_col='',
-                   mean_snr=False, std_snr=False, mean_color=False, std_color=False, max_color=False, slope_color=False):
+def merge_features(features_1, features_2):
     
     """Merge feature tables of band g and r. 
     Also merge valid columns into one
@@ -385,47 +358,19 @@ def merge_features(features_1, features_2, target_col='',
     """
         
     # Avoid having twice the same column
-    
-    if target_col == '':
-        features_2 = features_2.drop(columns={'object_id'})
-    else:
-        features_2 = features_2.drop(columns={'object_id', target_col})
+    features_2 = features_2.drop(columns={'object_id'})
     
     features = features_1.join(features_2)
     valid = features['valid_1'] & features['valid_2']
     features = features.drop(columns=['valid_1', 'valid_2'])
     
 
-    ordered_features = features[['object_id', 'std_1', 'std_2', 'peak_1', 'peak_2', 'nb_points_1', 'nb_points_2']].copy()
-    
-    
-    if mean_snr :
-        ordered_features['mean_snr_1'] = features['mean_snr_1']
-        ordered_features['mean_snr_2'] = features['mean_snr_2']
-        
-    if std_snr :
-        ordered_features['std_snr_1'] = features['std_snr_1']
-        ordered_features['std_snr_2'] = features['std_snr_2']
-        
-    if mean_color | std_color | max_color :
-        
-        color = features.apply(compute_color, axis=1)
+    ordered_features = features[['object_id', 'std_1', 'std_2', 'peak_1', 'peak_2', 'mean_snr_1', 'mean_snr_2', 'nb_points_1', 'nb_points_2']].copy()
 
-        if mean_color :
-            ordered_features['mean_color'] = color.apply(np.mean)
-            
-        if std_color :
-            ordered_features['std_color'] = color.apply(np.std)
-            
-        if max_color :
-            ordered_features['max_color'] = color.apply(np.max)
-            
-        if slope_color:
-            features['color'] = color
-            ordered_features['slope_color'] = features.apply(compute_slope_color, axis=1)
-    
-    if target_col != '':
-        ordered_features[target_col] = features[target_col]
+    # Add color features
+    color = features.apply(compute_color, axis=1)
+    ordered_features['std_color'] = color.apply(np.std)
+    ordered_features['max_color'] = color.apply(np.max)
         
     return ordered_features, valid
 
