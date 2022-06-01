@@ -278,7 +278,7 @@ def compute_color(pdf):
     return new_cflux_1-new_cflux_2
 
 
-def parametrise(transformed, minimum_points, band):
+def parametrise(transformed, minimum_points, band, target_col=''):
     
     """Extract parameters from a transformed dataset. Construct a new DataFrame
     Parameters are :  - 'nb_points' : number of points
@@ -322,6 +322,11 @@ def parametrise(transformed, minimum_points, band):
                                      f'valid_{band}':valid})
         
 
+    if target_col != '':
+        targets = transformed[target_col]
+        df_parameters['target'] = targets
+        
+        
     # Compute missing values for the color
     # The bump function is built to fit transient centered on 40
     transformed['cjd'] = transformed['cjd'].apply(lambda x: np.array(x) + 40)
@@ -334,7 +339,7 @@ def parametrise(transformed, minimum_points, band):
     return df_parameters
 
 
-def merge_features(features_1, features_2):
+def merge_features(features_1, features_2, target_col=''):
     
     """Merge feature tables of band g and r. 
     Also merge valid columns into one
@@ -358,7 +363,10 @@ def merge_features(features_1, features_2):
     """
         
     # Avoid having twice the same column
-    features_2 = features_2.drop(columns={'object_id'})
+    if target_col == '':
+        features_2 = features_2.drop(columns={'object_id'})
+    else:
+        features_2 = features_2.drop(columns={'object_id', target_col})
     
     features = features_1.join(features_2)
     valid = features['valid_1'] & features['valid_2']
@@ -371,6 +379,10 @@ def merge_features(features_1, features_2):
     color = features.apply(compute_color, axis=1)
     ordered_features['std_color'] = color.apply(np.std)
     ordered_features['max_color'] = color.apply(np.max)
+    
+    
+    if target_col != '':
+        ordered_features[target_col] = features[target_col]
         
     return ordered_features, valid
 
