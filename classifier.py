@@ -3,9 +3,6 @@ from sklearn.ensemble import RandomForestClassifier
 import kernel as k
 import classifier as rfc
 import feature_extraction as fe
-import matplotlib.pyplot as plt
-import seaborn as sns
-from sklearn.metrics import confusion_matrix
 import numpy as np
 import pandas as pd
 
