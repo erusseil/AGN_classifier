@@ -185,7 +185,8 @@ def get_max(x):
         return x.max()
     
 def compute_snr(pdf):
-    """Compute a new column : signal to noise ratio
+    
+    """Compute signal to noise ratio
     
     Parameters
     ----------
@@ -250,6 +251,23 @@ def transform_data(converted):
 
 
 def parametric_bump(pdf):
+    
+    """ Fit the lightcurves using the bump function. Extract the parameters
+
+
+    Parameters
+    ----------
+    pdf : pd.DataFrame 
+        Dataframe of alerts from Fink with nan removed and converted to flux.
+        Flux must be normalised 
+        Lightcurves's max flux must be centered on 40
+
+    Returns
+    -------
+    parameters : list
+        List of best fitting parameter values [p1, p2, p3, p4]
+
+    """
 
     parameters_dict = {'p1':0.225, 'p2':-2.5, 'p3':0.038, 'p4':0}
 
@@ -261,10 +279,27 @@ def parametric_bump(pdf):
     parameters = []
     for fit_v in range(len(fit.values)):
         parameters.append(fit.values[fit_v])
-        
+
     return parameters
 
 def compute_color(pdf):
+    
+    """ Compute the color of an alert by computing g-r
+    Proceed by virtually filling missing points of each band using the bump fit
+    
+    Parameters
+    ----------
+    pdf : pd.DataFrame 
+        Dataframe of alerts from Fink with nan removed and converted to flux.
+        Flux must be normalised 
+        Lightcurves's max flux must be centered on 40
+        
+    Returns
+    -------
+    np.array
+        Array of color g-r at each point
+        
+    """
     
     # Compute fitted values at cjd from the other band
     add_from_2 = bump(pdf['cjd_2'], *pdf['bump_1'])
@@ -284,7 +319,11 @@ def parametrise(transformed, minimum_points, band, target_col=''):
     Parameters are :  - 'nb_points' : number of points
                       - 'std' : standard deviation of the flux
                       - 'peak' : maximum before normalization
+                      - 'mean_snr' : mean signal over noise ratio
                       - 'valid' : is the number of point above the minimum (boolean)
+                      
+    Also compute a fit using the bump function on each lightcurve. Parameters
+    of the fit will later be used to compute color parameters
     
     Parameters
     ----------
@@ -295,13 +334,15 @@ def parametrise(transformed, minimum_points, band, target_col=''):
     band : int
         Passband of the dataframe
     target_col: str
-        If inputed a non empty str, add the corresponding column as a target column
+        If inputed a non empty str, add the corresponding 
+        column as a target column to the final dataset
+        Default is ''
         
     Returns
     -------
     df_parameters : pd.DataFrame
-        DataFrame of parameters with columns 
-        ['object_id', 'std', 'peak', 'nb_points', 'valid']
+        DataFrame of parameters. 
+        Contains additionnal columns which will be used to compute color parameters
     """
 
     
@@ -342,7 +383,9 @@ def parametrise(transformed, minimum_points, band, target_col=''):
 def merge_features(features_1, features_2, target_col=''):
     
     """Merge feature tables of band g and r. 
-    Also merge valid columns into one
+    Also merge valid columns into one.
+    Compute color parameters : - 'max_color' : absolute maximum of the color
+                               - 'std_color' : standard deviation of the color
     
     Parameters
     ----------
@@ -351,15 +394,19 @@ def merge_features(features_1, features_2, target_col=''):
     features_2: pd.DataFrame
         features of band r
     target_col: str
-        If inputed a non empty str, add the corresponding column as a target column
+        If inputed a non empty str, add the corresponding 
+        column as a target column to the final dataset
+        Default is ''
         
     Returns
     -------
-    features : pd.DataFrame
-        Merged features with valid column dropped
+    ordered_features : pd.DataFrame
+        Final features dataset with ordered columns :
+        ['object_id', 'std_1', 'std_2', 'peak_1', 'peak_2', 'mean_snr_1',
+        'mean_snr_2', 'nb_points_1', 'nb_points_2', 'std_color', 'max_color']
         
     valid : np.array
-        Bool array, indicates if both passband respect the minimum number of points
+        Boolean array, indicates if both passband respect the minimum number of points
     """
         
     # Avoid having twice the same column
@@ -378,7 +425,7 @@ def merge_features(features_1, features_2, target_col=''):
     # Add color features
     color = features.apply(compute_color, axis=1)
     ordered_features['std_color'] = color.apply(np.std)
-    ordered_features['max_color'] = color.apply(np.max)
+    ordered_features['max_color'] = color.apply(lambda x: max(np.min(x), np.max(x), key=abs))
     
     
     if target_col != '':
