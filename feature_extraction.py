@@ -253,20 +253,16 @@ def transform_data(converted):
 def parametric_bump(pdf):
     
     """ Fit the lightcurves using the bump function. Extract the parameters
-
-
     Parameters
     ----------
     pdf : pd.DataFrame 
         Dataframe of alerts from Fink with nan removed and converted to flux.
         Flux must be normalised 
         Lightcurves's max flux must be centered on 40
-
     Returns
     -------
     parameters : list
         List of best fitting parameter values [p1, p2, p3, p4]
-
     """
 
     parameters_dict = {'p1':0.225, 'p2':-2.5, 'p3':0.038, 'p4':0}
@@ -284,14 +280,14 @@ def parametric_bump(pdf):
 
 def compute_color(pdf):
     
-    """ Compute the color of an alert by computing g-r
+    """ Compute the color of an alert by computing g-r (before normalisation)
     Proceed by virtually filling missing points of each band using the bump fit
     
     Parameters
     ----------
     pdf : pd.DataFrame 
         Dataframe of alerts from Fink with nan removed and converted to flux.
-        Flux must be normalised 
+        Flux must be normalised with normalization factor inside column ['peak']
         Lightcurves's max flux must be centered on 40
         
     Returns
@@ -309,8 +305,11 @@ def compute_color(pdf):
     new_cflux_1 = np.append(pdf['cflux_1'], add_from_2)
     new_cflux_2 = np.append(add_from_1, pdf['cflux_2'])
     
+    unnorm_cflux_1 = new_cflux_1*pdf['peak_1']
+    unnorm_cflux_2 = new_cflux_2*pdf['peak_2']
+    
     # Return g-r
-    return new_cflux_1-new_cflux_2
+    return unnorm_cflux_1-unnorm_cflux_2
 
 
 def parametrise(transformed, minimum_points, band, target_col=''):
